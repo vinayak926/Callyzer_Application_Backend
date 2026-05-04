@@ -9,7 +9,8 @@ const {
     getPendingFollowUps,
     getLeaderboard,
     getTeamCallStats,
-    getHourlyBreakdown,          
+    getHourlyBreakdown,
+    getSyncStatus,
 } = require("../controllers/callController");
 
 
@@ -34,5 +35,6 @@ router.get("/leaderboard", getLeaderboard);
 router.get("/team-stats", getTeamCallStats);
 
 router.get("/hourly", getHourlyBreakdown);
+router.get("/sync-status", getSyncStatus);   
 
 module.exports = router;
