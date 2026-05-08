@@ -5,10 +5,12 @@ const connectDB = require("./src/config/db");
 const seedAdmin = require("./src/config/seedAdmin");
 const { initSocket } = require("./src/socket");
 
+const { seedPlans } = require('./src/controllers/planController');
+
 const start = async () => {
   await connectDB();      // first connect to DB
   await seedAdmin();      // then check/create admin
-
+  await seedPlans(); 
   // Create HTTP server
   const server = http.createServer(app);
   

@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema(
       ref: "User",
       default: null,   // Koi manager assign nahi hai to null
     },
+    subscriptionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription', default: null },
+    planId:{ type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null },
+    trialStartedAt: { type: Date, default: null },
+
   },
   { timestamps: true }
 );
