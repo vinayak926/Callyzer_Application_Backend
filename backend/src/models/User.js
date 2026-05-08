@@ -33,6 +33,24 @@ const userSchema = new mongoose.Schema(
       ref: "User",
       default: null,   // Koi manager assign nahi hai to null
     },
+
+    extensionToken: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    extensionTokenExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    fcmTokens: [
+      {
+        token:      { type: String },
+        deviceName: { type: String, default: 'Android' },
+        addedAt:    { type: Date,   default: Date.now },
+      }
+    ],
+
     subscriptionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription', default: null },
     planId:{ type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null },
     trialStartedAt: { type: Date, default: null },

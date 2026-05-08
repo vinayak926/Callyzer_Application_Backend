@@ -78,31 +78,56 @@ const initSocket = (server) => {
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
 
+        // socket.on('join-user', (userData) => {
+        //     const { userId, role, businessUserId } = userData;
+
+        //     // Join individual user room
+        //     socket.join(`user-${userId}`);
+
+        //     // Join role-based room
+        //     socket.join(role);
+
+        //     // ── Business User: apne dedicated room mein join karo ──
+        //     // Taaki sirf unki team ke calls milein
+        //     if (role === 'business_user') {
+        //         socket.join(`bu-${userId}`);
+        //         console.log(`📢 Business User ${userId} joined room: bu-${userId}`);
+        //     }
+
+        //     // ── Salesperson: apne Business User ke room mein bhi join karo ──
+        //     // Taaki BU ko unki team ke calls milein
+        //     if (role === 'salesperson' && businessUserId) {
+        //         socket.join(`bu-${businessUserId}`);
+        //         console.log(`📢 Salesperson ${userId} joined BU room: bu-${businessUserId}`);
+        //     }
+
+        //     console.log(`📢 User ${userId} (${role}) joined room: ${role}`);
+        // });
+
         socket.on('join-user', (userData) => {
-            const { userId, role, businessUserId } = userData;
+            const { userId, role, businessUserId, isMobile = false } = userData;
 
-            // Join individual user room
+            // NEW — store on socket.data for fetchSockets() inspection
+            socket.data.userId   = userId;
+            socket.data.role     = role;
+            socket.data.isMobile = isMobile === true || isMobile === 'true';
+
             socket.join(`user-${userId}`);
-
-            // Join role-based room
             socket.join(role);
 
-            // ── Business User: apne dedicated room mein join karo ──
-            // Taaki sirf unki team ke calls milein
             if (role === 'business_user') {
                 socket.join(`bu-${userId}`);
-                console.log(`📢 Business User ${userId} joined room: bu-${userId}`);
+                console.log(`Business User ${userId} joined room: bu-${userId}`);
             }
 
-            // ── Salesperson: apne Business User ke room mein bhi join karo ──
-            // Taaki BU ko unki team ke calls milein
             if (role === 'salesperson' && businessUserId) {
                 socket.join(`bu-${businessUserId}`);
-                console.log(`📢 Salesperson ${userId} joined BU room: bu-${businessUserId}`);
+                console.log(`Salesperson ${userId} joined BU room: bu-${businessUserId}`);
             }
 
-            console.log(`📢 User ${userId} (${role}) joined room: ${role}`);
+            console.log(`User ${userId} (${role}) isMobile:${socket.data.isMobile} joined: ${role}`);
         });
+
 
         socket.on('disconnect', () => {
             console.log('🔌 Client disconnected:', socket.id);
