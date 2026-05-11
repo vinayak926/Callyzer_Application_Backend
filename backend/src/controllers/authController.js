@@ -100,6 +100,7 @@ exports.login = async (req, res) => {
         role: user.role,
         status: user.status,
         phone: user.phone,
+        businessUserId: user.businessUserId || null,
       },
     });
   } catch (err) {

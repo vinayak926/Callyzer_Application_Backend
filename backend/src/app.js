@@ -7,6 +7,7 @@ const reportsRoutes = require("./routes/reportsRoutes");
 const businessRoutes = require("./routes/businessRoutes");
 const planRoutes = require('./routes/planRoutes');
 const extensionRoutes = require('./routes/extensionRoutes');
+const leadRoutes      = require('./routes/leadRoutes');
 
 const app = express();
 
@@ -56,7 +57,8 @@ app.use("/api/business", businessRoutes);
 // app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use('/api/extension', extensionRoutes);
-app.use('/api', planRoutes); 
+app.use('/api/leads', leadRoutes);
+app.use('/api', planRoutes);  
 // app.use("/api/targets", targetRoutes);
 
 
