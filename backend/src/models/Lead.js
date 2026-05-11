@@ -42,8 +42,8 @@ const leadSchema = new mongoose.Schema(
     // Status with three fixed options
     status: {
       type: String,
-      enum: ["Interested", "Not Interested", "DNP"],
-      default: "Interested",
+      enum: ["Fresh Lead", "Interested", "Not Interested", "DNP"],
+      default: "Fresh Lead",
     },
 
     // Latest follow-up fields (denormalised for quick list view)

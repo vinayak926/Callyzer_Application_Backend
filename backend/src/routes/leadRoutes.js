@@ -8,6 +8,7 @@ const {
   importLeads,
   addFollowUp,
   getLeadStats,
+  getWorkedLeads,
 } = require("../controllers/leadController");
 
 const protect = require("../middlewares/authMiddleware");
@@ -20,6 +21,7 @@ router.use(protect);
 // Warna Express "stats" aur "import" ko /:id ki value samajh leta hai
 
 router.get("/stats",         getLeadStats);   // GET    /api/leads/stats
+router.get("/worked",        getWorkedLeads);   // ✅ NAYA ROUTE
 router.post("/import",       importLeads);    // POST   /api/leads/import
 
 router.get("/",              getLeads);       // GET    /api/leads

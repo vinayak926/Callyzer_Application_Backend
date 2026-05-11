@@ -25,9 +25,13 @@ exports.getLeads = async (req, res) => {
       filter.assignedTo = req.user._id;
     }
 
-    if (status && ["Interested", "Not Interested", "DNP"].includes(status)) {
+    // if (status && ["Interested", "Not Interested", "DNP"].includes(status)) {
+    //   filter.status = status;
+    // }
+    if (status && ["Fresh Lead", "Interested", "Not Interested", "DNP"].includes(status)) {
       filter.status = status;
     }
+
 
     // FIX: search ke liye $and use karo taaki assignedTo filter break na ho
     if (search) {
@@ -86,19 +90,29 @@ exports.getLeadStats = async (req, res) => {
     const filter = { businessUserId: businessId };
     if (req.user.role === "salesperson") filter.assignedTo = req.user._id;
 
-    const [total, interested, notInterested, dnp, pendingFollowups] = await Promise.all([
+    // const [total, interested, notInterested, dnp, pendingFollowups] = await Promise.all([
+    //   Lead.countDocuments(filter),
+    //   Lead.countDocuments({ ...filter, status: "Interested" }),
+    //   Lead.countDocuments({ ...filter, status: "Not Interested" }),
+    //   Lead.countDocuments({ ...filter, status: "DNP" }),
+    //   Lead.countDocuments({
+    //     ...filter,
+    //     followUpDate: { $lte: new Date() },
+    //     status: "Interested",
+    //   }),
+    // ]);
+
+    // res.json({ total, interested, notInterested, dnp, pendingFollowups });
+    const [total, freshLeads, interested, notInterested, dnp, pendingFollowups] = await Promise.all([
       Lead.countDocuments(filter),
+      Lead.countDocuments({ ...filter, status: "Fresh Lead" }),  // ✅ NAYA
       Lead.countDocuments({ ...filter, status: "Interested" }),
       Lead.countDocuments({ ...filter, status: "Not Interested" }),
       Lead.countDocuments({ ...filter, status: "DNP" }),
-      Lead.countDocuments({
-        ...filter,
-        followUpDate: { $lte: new Date() },
-        status: "Interested",
-      }),
+      Lead.countDocuments({ ...filter, followUpDate: { $lte: new Date() }, status: "Interested" }),
     ]);
+    res.json({ total, freshLeads, interested, notInterested, dnp, pendingFollowups });  // ✅
 
-    res.json({ total, interested, notInterested, dnp, pendingFollowups });
   } catch (err) {
     console.error("getLeadStats:", err);
     res.status(500).json({ message: "Server error" });
@@ -128,42 +142,76 @@ exports.getLeadById = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // POST /api/leads
 // ─────────────────────────────────────────────────────────────
+// exports.createLead = async (req, res) => {
+//   try {
+//     const businessId = resolveBusinessId(req.user);
+//     if (!businessId) return res.status(403).json({ message: "Forbidden" });
+
+//     const {
+//       customerName, mobileNumber, courseName, leadSource,
+//       status, followUpDescription, followUpDate, assignedTo,
+//     } = req.body;
+
+//     if (!customerName || !mobileNumber) {
+//       return res.status(400).json({ message: "customerName aur mobileNumber required hain" });
+//     }
+
+//     const lead = await Lead.create({
+//       businessUserId:      businessId,
+//       assignedTo:          assignedTo || null,
+//       customerName,
+//       mobileNumber,
+//       courseName:          courseName          || "",
+//       leadSource:          leadSource          || "",
+//       status:              status              || "Interested",
+//       followUpDescription: followUpDescription || "",
+//       followUpDate:        followUpDate        || null,
+//       followUpHistory: followUpDescription
+//         ? [{ description: followUpDescription, followUpDate: followUpDate || null, updatedBy: req.user._id }]
+//         : [],
+//       source: "manual",
+//     });
+
+//     res.status(201).json({ message: "Lead created", lead });
+//   } catch (err) {
+//     console.error("createLead:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
 exports.createLead = async (req, res) => {
   try {
     const businessId = resolveBusinessId(req.user);
     if (!businessId) return res.status(403).json({ message: "Forbidden" });
-
-    const {
-      customerName, mobileNumber, courseName, leadSource,
-      status, followUpDescription, followUpDate, assignedTo,
-    } = req.body;
-
+ 
+   
+    const { customerName, mobileNumber, courseName, leadSource, assignedTo } = req.body;
+ 
     if (!customerName || !mobileNumber) {
       return res.status(400).json({ message: "customerName aur mobileNumber required hain" });
     }
-
+ 
     const lead = await Lead.create({
-      businessUserId:      businessId,
-      assignedTo:          assignedTo || null,
+      businessUserId: businessId,
+      assignedTo:     assignedTo || null,
       customerName,
       mobileNumber,
-      courseName:          courseName          || "",
-      leadSource:          leadSource          || "",
-      status:              status              || "Interested",
-      followUpDescription: followUpDescription || "",
-      followUpDate:        followUpDate        || null,
-      followUpHistory: followUpDescription
-        ? [{ description: followUpDescription, followUpDate: followUpDate || null, updatedBy: req.user._id }]
-        : [],
+      courseName:  courseName  || "",
+      leadSource:  leadSource  || "",
+      status:      "Fresh Lead",  
+      followUpDescription: "",    
+      followUpDate:        null,  
+      followUpHistory:     [],
       source: "manual",
     });
-
+ 
     res.status(201).json({ message: "Lead created", lead });
   } catch (err) {
     console.error("createLead:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────
 // PUT /api/leads/:id
@@ -263,10 +311,13 @@ exports.importLeads = async (req, res) => {
         mobileNumber:        String(r.mobileNumber).trim(),
         courseName:          String(r.courseName          || "").trim(),
         leadSource:          String(r.leadSource          || "").trim(),
-        status:              ["Interested", "Not Interested", "DNP"].includes(r.status)
-                               ? r.status : "Interested",
-        followUpDescription: String(r.followUpDescription || r.notes || "").trim(),
-        followUpDate:        r.followUpDate ? new Date(r.followUpDate) : null,
+        // status:              ["Interested", "Not Interested", "DNP"].includes(r.status)
+        //                        ? r.status : "Interested",
+        // followUpDescription: String(r.followUpDescription || r.notes || "").trim(),
+        // followUpDate:        r.followUpDate ? new Date(r.followUpDate) : null,
+        status: "Fresh Lead", 
+        followUpDescription: "",  
+        followUpDate: null,       
         followUpHistory:     [],
         source:              sourceType,
       }));
@@ -328,6 +379,68 @@ exports.addFollowUp = async (req, res) => {
     res.json({ message: "Follow-up add ho gaya", lead });
   } catch (err) {
     console.error("addFollowUp:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/leads/worked  — sirf business_user
+// Salesperson ki activity track karne ke liye
+// ─────────────────────────────────────────────────────────────
+exports.getWorkedLeads = async (req, res) => {
+  try {
+    if (req.user.role !== "business_user") {
+      return res.status(403).json({ message: "Sirf business user access kar sakta hai" });
+    }
+ 
+    const businessId = req.user._id;
+    const { salespersonId, status, fromDate, toDate, page = 1, limit = 30 } = req.query;
+ 
+    // Sirf wahi leads jo salesperson ne touch ki hain (followup history hai)
+    const filter = {
+      businessUserId: businessId,
+      assignedTo: { $ne: null },  // assigned honi chahiye
+      $or: [
+        { "followUpHistory.0": { $exists: true } },  // followup history ho
+        { status: { $in: ["Interested", "Not Interested", "DNP"] } }  // ya status changed ho
+      ]
+    };
+ 
+    if (salespersonId) filter.assignedTo = salespersonId;
+    if (status && ["Interested", "Not Interested", "DNP"].includes(status)) {
+      filter.status = status;
+    }
+    if (fromDate || toDate) {
+      filter.updatedAt = {};
+      if (fromDate) filter.updatedAt.$gte = new Date(fromDate);
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        filter.updatedAt.$lte = end;
+      }
+    }
+ 
+    const skip = (Number(page) - 1) * Number(limit);
+ 
+    const [leads, total] = await Promise.all([
+      Lead.find(filter)
+        .populate("assignedTo", "name email phone")
+        .populate("followUpHistory.updatedBy", "name")
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      Lead.countDocuments(filter),
+    ]);
+ 
+    res.json({
+      leads,
+      total,
+      page:  Number(page),
+      pages: Math.ceil(total / Number(limit)),
+    });
+  } catch (err) {
+    console.error("getWorkedLeads:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
