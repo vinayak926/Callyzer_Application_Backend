@@ -975,6 +975,21 @@ function getInitials(name) {
     return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
+// function convertToCSV(calls) {
+//     const headers = ["Date", "Customer Name", "Phone", "Type", "Status", "Duration (sec)", "Agent", "Notes"];
+//     const rows = calls.map(call => [
+//         new Date(call.calledAt).toLocaleDateString("en-IN"),
+//         call.customerName || "Unknown",
+//         call.customerNumber,
+//         call.callType,
+//         call.callStatus,
+//         call.durationSeconds,
+//         call.agent?.name || "Unknown",
+//         call.notes || "",
+//     ]);
+//     return [headers, ...rows].map(row => row.join(",")).join("\n");
+// }
+
 function convertToCSV(calls) {
     const headers = ["Date", "Customer Name", "Phone", "Type", "Status", "Duration (sec)", "Agent", "Notes"];
     const rows = calls.map(call => [
@@ -989,3 +1004,185 @@ function convertToCSV(calls) {
     ]);
     return [headers, ...rows].map(row => row.join(",")).join("\n");
 }
+
+// ══════════════════════════════════════════════════════════
+//  NEW — GET /api/reports/my-calllogs
+//  Salesperson: apne khud ke call logs + summary
+//  Query: fromDate, toDate  (default = today)
+// ══════════════════════════════════════════════════════════
+exports.getMyCallLogs = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Only salesperson can call this
+        if (req.user.role !== "salesperson") {
+            return res.status(403).json({ message: "Access denied. Salesperson only." });
+        }
+
+        const { fromDate, toDate } = req.query;
+
+        // Default = today
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd   = new Date(todayStart.getTime() + 86400000);
+
+        const start = fromDate ? new Date(fromDate + "T00:00:00.000Z") : todayStart;
+        const end   = toDate   ? new Date(toDate   + "T23:59:59.999Z") : todayEnd;
+
+        const filter = {
+            agent: userId,
+            calledAt: { $gte: start, $lte: end },
+        };
+
+        // Summary counts
+        const [total, connected, missed, rejected] = await Promise.all([
+            CallLog.countDocuments(filter),
+            CallLog.countDocuments({ ...filter, callStatus: "Connected" }),
+            CallLog.countDocuments({ ...filter, callStatus: "Missed" }),
+            CallLog.countDocuments({ ...filter, callStatus: "Rejected" }),
+        ]);
+
+        const durationAgg = await CallLog.aggregate([
+            { $match: filter },
+            { $group: { _id: null, total: { $sum: "$durationSeconds" }, avg: { $avg: "$durationSeconds" } } },
+        ]);
+
+        // All call logs in date range (for table)
+        const calls = await CallLog.find(filter)
+            .sort({ calledAt: -1 })
+            .select("customerName customerNumber callType callStatus durationSeconds calledAt notes disposition followUpDate")
+            .lean();
+
+        res.json({
+            summary: {
+                total,
+                connected,
+                missed,
+                rejected,
+                notConnected: missed + rejected,
+                connectRate: total > 0 ? Math.round((connected / total) * 100) : 0,
+                totalDuration: fmt(durationAgg[0]?.total || 0),
+                avgDuration:   fmt(durationAgg[0]?.avg   || 0),
+                totalDurationSec: durationAgg[0]?.total || 0,
+            },
+            calls,
+            dateRange: {
+                from: start.toISOString().split("T")[0],
+                to:   end.toISOString().split("T")[0],
+            },
+        });
+    } catch (err) {
+        console.error("getMyCallLogs error:", err);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+// ══════════════════════════════════════════════════════════
+//  NEW — GET /api/reports/salesperson/:id
+//  Business User: kisi bhi apne salesperson ka report
+//  Query: fromDate, toDate  (default = today)
+// ══════════════════════════════════════════════════════════
+exports.getSalespersonReport = async (req, res) => {
+    try {
+        const businessUserId = req.user._id;
+        const { id } = req.params;
+
+        // Only business_user can call this
+        if (req.user.role !== "business_user") {
+            return res.status(403).json({ message: "Access denied. Business User only." });
+        }
+
+        // Verify this salesperson belongs to the business user
+        const salesperson = await User.findOne({
+            _id: id,
+            businessUserId: businessUserId,
+            role: "salesperson",
+        }).select("-password").lean();
+
+        if (!salesperson) {
+            return res.status(404).json({ message: "Salesperson not found or access denied." });
+        }
+
+        const { fromDate, toDate } = req.query;
+
+        // Default = today
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd   = new Date(todayStart.getTime() + 86400000);
+
+        const start = fromDate ? new Date(fromDate + "T00:00:00.000Z") : todayStart;
+        const end   = toDate   ? new Date(toDate   + "T23:59:59.999Z") : todayEnd;
+
+        const filter = {
+            agent: salesperson._id,
+            calledAt: { $gte: start, $lte: end },
+        };
+
+        const [total, connected, missed, rejected] = await Promise.all([
+            CallLog.countDocuments(filter),
+            CallLog.countDocuments({ ...filter, callStatus: "Connected" }),
+            CallLog.countDocuments({ ...filter, callStatus: "Missed" }),
+            CallLog.countDocuments({ ...filter, callStatus: "Rejected" }),
+        ]);
+
+        const durationAgg = await CallLog.aggregate([
+            { $match: filter },
+            { $group: { _id: null, total: { $sum: "$durationSeconds" }, avg: { $avg: "$durationSeconds" } } },
+        ]);
+
+        const calls = await CallLog.find(filter)
+            .sort({ calledAt: -1 })
+            .select("customerName customerNumber callType callStatus durationSeconds calledAt notes disposition followUpDate")
+            .lean();
+
+        res.json({
+            salesperson: {
+                id:    salesperson._id,
+                name:  salesperson.name,
+                email: salesperson.email,
+                phone: salesperson.phone || "",
+            },
+            summary: {
+                total,
+                connected,
+                missed,
+                rejected,
+                notConnected: missed + rejected,
+                connectRate: total > 0 ? Math.round((connected / total) * 100) : 0,
+                totalDuration: fmt(durationAgg[0]?.total || 0),
+                avgDuration:   fmt(durationAgg[0]?.avg   || 0),
+                totalDurationSec: durationAgg[0]?.total || 0,
+            },
+            calls,
+            dateRange: {
+                from: start.toISOString().split("T")[0],
+                to:   end.toISOString().split("T")[0],
+            },
+        });
+    } catch (err) {
+        console.error("getSalespersonReport error:", err);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+// ══════════════════════════════════════════════════════════
+//  NEW — GET /api/reports/my-salespersons
+//  Business User: apni team ki list (for dropdown)
+// ══════════════════════════════════════════════════════════
+exports.getMySalespersons = async (req, res) => {
+    try {
+        if (req.user.role !== "business_user") {
+            return res.status(403).json({ message: "Access denied." });
+        }
+
+        const salespersons = await User.find({
+            businessUserId: req.user._id,
+            role: "salesperson",
+        }).select("name email phone isActive").lean();
+
+        res.json({ salespersons });
+    } catch (err) {
+        console.error("getMySalespersons error:", err);
+        res.status(500).json({ message: "Server error" });
+    }
+};
