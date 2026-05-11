@@ -21,11 +21,12 @@ router.get('/plans', getPlans);
 // router.use(protect);
 // router.use(businessOnly);
 
-router.post('/subscriptions/start-trial', startTrial);
-router.post('/subscriptions/create-order', createOrder);
-router.post('/subscriptions/verify-payment', verifyPayment);
-router.get('/subscriptions/my', getMySubscription);
-router.post('/subscriptions/cancel', cancelSubscription);
-router.get('/invoices', getMyInvoices);
+// Protected — business_user only
+router.post('/subscriptions/start-trial', protect, startTrial);
+router.post('/subscriptions/create-order', protect, createOrder);
+router.post('/subscriptions/verify-payment', protect, verifyPayment);
+router.get('/subscriptions/my', protect, getMySubscription);
+router.post('/subscriptions/cancel', protect, cancelSubscription);
+router.get('/invoices', protect, getMyInvoices);
 
 module.exports = router;
