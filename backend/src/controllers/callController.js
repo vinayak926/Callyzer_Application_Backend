@@ -1845,6 +1845,7 @@ exports.bulkImportCalls = async (req, res) => {
     try {
         const calls = req.body.calls;
 
+        console.log(`[DEBUG BulkImport] Total received: ${calls?.length}`);
         if (!calls || !Array.isArray(calls) || calls.length === 0) {
             return res.status(400).json({ message: "No calls data provided" });
         }
@@ -1884,9 +1885,13 @@ exports.bulkImportCalls = async (req, res) => {
 
         // ── PASS 2: phone+timestamp fallback for calls without deviceLogId ──
         // Only look back 8 days to keep the query cheap.
+        // const fallbackExisting = await CallLog.find({
+        //     agent: req.user._id,
+        //     calledAt: { $gte: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) },
+        // }).select("customerNumber calledAt").lean();
         const fallbackExisting = await CallLog.find({
             agent: req.user._id,
-            calledAt: { $gte: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) },
+            calledAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         }).select("customerNumber calledAt").lean();
 
         const fallbackSet = new Set(
@@ -1897,6 +1902,9 @@ exports.bulkImportCalls = async (req, res) => {
         const createdCalls = [];
         const skipped = [];
 
+        // ── 24-hour cutoff: computed ONCE before the loop ──
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
         for (const call of calls) {
             const rawType = call.callType || "Outgoing";
             const duration = Number(call.durationSeconds) || 0;
@@ -1904,6 +1912,12 @@ exports.bulkImportCalls = async (req, res) => {
             const phone = (call.customerNumber || "").trim();
 
             if (!phone) continue; // skip malformed entries
+
+            // ── 24-hour filter: reject calls older than 1 day ──
+            if (calledAtDate < cutoff24h) {
+                skipped.push(`old_${call.deviceLogId || phone}_${calledAtDate.getTime()}`);
+                continue;
+            }
 
             // ── Dedup check ─────────────────────────────────
             const deviceId = call.deviceLogId || null;
