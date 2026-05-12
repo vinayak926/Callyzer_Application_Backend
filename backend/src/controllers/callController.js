@@ -2018,13 +2018,16 @@ exports.getLeaderboard = async (req, res) => {
 
         const now = new Date();
         let startDate;
-        if (period === "daily") {
+        if (period === "daily" || period === "today") {
             startDate = new Date(now);
             startDate.setHours(0, 0, 0, 0);
         } else if (period === "weekly") {
             startDate = new Date(now);
-            startDate.setDate(startDate.getDate() - 7);
+            startDate.setDate(now.getDate() - 7);
+        } else if (period === "all") {
+            startDate = new Date("2020-01-01"); // bahut purani date — sab data aayega
         } else {
+            // monthly
             startDate = new Date(now);
             startDate.setDate(1);
             startDate.setHours(0, 0, 0, 0);
@@ -2071,11 +2074,23 @@ exports.getLeaderboard = async (req, res) => {
                     agentId: "$_id",
                     name: "$agentInfo.name",
                     email: "$agentInfo.email",
+                    agentName: "$agentInfo.name",   // ← old frontend isko use karta tha
+                    agentEmail: "$agentInfo.email", // ← old frontend isko use karta tha
                     total: 1,
                     connected: 1,
                     missed: 1,
                     totalDuration: 1,
+                    totalCalls: "$total",           // ← frontend expects 'totalCalls'
+                    connectedCalls: "$connected",   // ← frontend expects 'connectedCalls'
                 },
+            },
+            {
+                $addFields: {
+                    totalCalls: "$total",
+                    connectedCalls: "$connected",
+                    agentName: "$name",
+                    agentEmail: "$email",
+                }
             },
         ]);
 
@@ -2142,7 +2157,27 @@ exports.getTeamCallStats = async (req, res) => {
             },
         ]);
 
-        res.json({ stats: agg });
+        // res.json({ stats: agg });
+        const totalCalls = agg.reduce((s, a) => s + a.total, 0);
+        const connectedCalls = agg.reduce((s, a) => s + a.connected, 0);
+        const missedCalls = agg.reduce((s, a) => s + a.missed, 0);
+        const totalDuration = agg.reduce((s, a) => s + a.totalDuration, 0);
+        const avgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
+
+        // Agents array bhi purane format mein bhejo
+        const agents = agg.map(a => ({
+            _id: a.agentId,
+            name: a.name,
+            email: a.email,
+            totalCalls: a.total,
+            connectedCalls: a.connected,
+            missedCalls: a.missed,
+        }));
+
+        res.json({
+            summary: { totalCalls, connectedCalls, missedCalls, avgDuration },
+            agents
+        });
     } catch (err) {
         console.error("getTeamCallStats error:", err);
         res.status(500).json({ message: "Server error" });
